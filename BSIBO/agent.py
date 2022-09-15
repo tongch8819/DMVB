@@ -10,6 +10,7 @@ from BSIBO.utils.rssm import get_feat, get_dist, flatten_states, RSSMState
 from BSIBO.utils.schedulers import ExponentialScheduler
 from BSIBO.utils import pytorch_util as ptu
 from BSIBO.ac import Actor, Critic
+from BSIBO.transition_model import make_transition_model
 
 
 class BSIBO(nn.Module):
@@ -186,6 +187,7 @@ class BSIBOSacAgent(object):
         obs_shape,
         action_shape,
         device,
+        transition_model_type,
         hidden_dim=256,
         discount=0.99,
         init_temperature=0.01,
@@ -206,6 +208,10 @@ class BSIBOSacAgent(object):
         deterministic_size=200,
         encoder_lr=1e-3,
         encoder_tau=0.005,
+        decoder_lr=1e-3,
+        decoder_update_freq=1,
+        decoder_latent_lambda=0.0,
+        decoder_weight_lambda=0.0,
         num_layers=4,
         num_filters=32,
         mib_update_freq=1,
@@ -217,6 +223,9 @@ class BSIBOSacAgent(object):
         beta_end_value=1,
         grad_clip=500,
         kl_balancing=False,
+        # parameters for DBC
+        encoder_stride=2,
+        bisim_coef=0.5,
     ):
         self.device = device
         self.discount = discount
@@ -234,6 +243,9 @@ class BSIBOSacAgent(object):
         self.grad_clip = grad_clip
         self.kl_balancing = kl_balancing
 
+        self.transition_model_type = transition_model_type
+        self.bisim_coef = bisim_coef
+
         self.encoder = make_rssm_encoder(
             encoder_type, obs_shape, action_shape, encoder_feature_dim,
             stochastic_size, deterministic_size, num_layers,
@@ -246,6 +258,8 @@ class BSIBOSacAgent(object):
         )
         feature_dim = stochastic_size + deterministic_size
 
+        # TODO: check diff between DBC and DRIBO
+        # decouple encoder from actor in DBC
         self.actor = Actor(
             action_shape, hidden_dim, feature_dim,
             actor_log_std_min, actor_log_std_max
@@ -261,6 +275,24 @@ class BSIBOSacAgent(object):
 
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.encoder_target.load_state_dict(self.encoder.state_dict())
+
+        # -------------------------------------------------
+        # transition model related components
+        self.transition_model = make_transition_model(
+            transition_model_type, encoder_feature_dim, action_shape
+        ).to(device)
+
+        self.reward_decoder = nn.Sequential(
+            nn.Linear(encoder_feature_dim, 512),
+            nn.LayerNorm(512),
+            nn.ReLU(),
+            nn.Linear(512, 1)).to(device)
+        self.decoder_optimizer = torch.optim.Adam(
+            list(self.reward_decoder.parameters()) + list(self.transition_model.parameters()),
+            lr=decoder_lr,
+            weight_decay=decoder_weight_lambda
+        )
+        # -------------------------------------------------
 
         self.log_alpha = torch.tensor(np.log(init_temperature)).to(device)
         self.log_alpha.requires_grad = True
@@ -408,6 +440,9 @@ class BSIBOSacAgent(object):
         self.log_alpha_optimizer.step()
 
     def update_mib(self, obs1, obs2, actions, mib_kwargs, L, step):
+        """
+        Update Mutiview Information Bottleneck 
+        """
         batch_t, batch_b, ch, h, w = obs1.size()
 
         z1_prior, z1 = self.BSIBO.encode(obs1, actions)
@@ -456,15 +491,100 @@ class BSIBOSacAgent(object):
             L.log('train/beta', beta, step)
             L.log('train/skl', skl, step)
 
+
+
+
+
     def update(self, replay_buffer, L, step):
-        if self.encoder_type == 'rssm':
-            obs, action, reward, \
-                not_done, mib_kwargs = replay_buffer.sample_multi_view(
-                    self.batch_size, self.seq_len
+        self.update_dribo(replay_buffer, L, step)
+        self.update_dbc(replay_buffer, L, step)
+
+    def update_dbc(self, replay_buffer, L, step):
+        # update encoder using DBC loss
+        def compute_bisim_loss(obs, action, reward):
+            """
+            Update encoder using DBC loss (Bisimulation Based)
+            """
+            h_rssm_state = self.encoder(obs)  # this encoder returns a RSSMState object
+            h = h_rssm_state.deter + h_rssm_state.stoch
+
+    
+            # Sample random states across episodes at random
+            batch_size = obs.size(0)
+            perm = np.random.permutation(batch_size)
+            h2 = h[perm]
+    
+            with torch.no_grad():
+                # action, _, _, _ = self.actor(obs, compute_pi=False, compute_log_pi=False)
+                pred_next_latent_mu1, pred_next_latent_sigma1 = self.transition_model(torch.cat([h, action], dim=1))
+                # reward = self.reward_decoder(pred_next_latent_mu1)
+                reward2 = reward[perm]
+            if pred_next_latent_sigma1 is None:
+                pred_next_latent_sigma1 = torch.zeros_like(pred_next_latent_mu1)
+            if pred_next_latent_mu1.ndim == 2:  # shape (B, Z), no ensemble
+                pred_next_latent_mu2 = pred_next_latent_mu1[perm]
+                pred_next_latent_sigma2 = pred_next_latent_sigma1[perm]
+            elif pred_next_latent_mu1.ndim == 3:  # shape (B, E, Z), using an ensemble
+                pred_next_latent_mu2 = pred_next_latent_mu1[:, perm]
+                pred_next_latent_sigma2 = pred_next_latent_sigma1[:, perm]
+            else:
+                raise NotImplementedError
+    
+            z_dist = F.smooth_l1_loss(h, h2, reduction='none')
+            r_dist = F.smooth_l1_loss(reward, reward2, reduction='none')
+            if self.transition_model_type == '':
+                transition_dist = F.smooth_l1_loss(pred_next_latent_mu1, pred_next_latent_mu2, reduction='none')
+            else:
+                transition_dist = torch.sqrt(
+                    (pred_next_latent_mu1 - pred_next_latent_mu2).pow(2) +
+                    (pred_next_latent_sigma1 - pred_next_latent_sigma2).pow(2)
                 )
-        else:
-            obs, action, reward, \
-                next_obs, not_done = replay_buffer.sample_proprio()
+                # transition_dist  = F.smooth_l1_loss(pred_next_latent_mu1, pred_next_latent_mu2, reduction='none') \
+                #     +  F.smooth_l1_loss(pred_next_latent_sigma1, pred_next_latent_sigma2, reduction='none')
+    
+            bisimilarity = r_dist + self.discount * transition_dist
+            loss = (z_dist - bisimilarity).pow(2).mean()
+            L.log('train_ae/encoder_loss', loss, step)
+            return loss
+
+        def compute_transition_reward_loss(obs, action, next_obs, reward):
+            h = self.encoder(obs)
+            pred_next_latent_mu, pred_next_latent_sigma = self.transition_model(torch.cat([h, action], dim=1))
+            if pred_next_latent_sigma is None:
+                pred_next_latent_sigma = torch.ones_like(pred_next_latent_mu)
+    
+            next_h = self.encoder(next_obs)
+            diff = (pred_next_latent_mu - next_h.detach()) / pred_next_latent_sigma
+            loss = torch.mean(0.5 * diff.pow(2) + torch.log(pred_next_latent_sigma))
+            L.log('train_ae/transition_loss', loss, step)
+    
+            pred_next_latent = self.transition_model.sample_prediction(torch.cat([h, action], dim=1))
+            pred_next_reward = self.reward_decoder(pred_next_latent)
+            reward_loss = F.mse_loss(pred_next_reward, reward)
+            total_loss = loss + reward_loss
+            return total_loss
+
+        # random sample instead of sequential sampling
+        obs, action, reward, next_obs, not_done = replay_buffer.sample_proprio()
+
+        dbc_loss = compute_bisim_loss(obs, action, reward)
+        transition_reward_loss = compute_transition_reward_loss(obs, action, next_obs, reward)
+        total_loss = self.bisim_coef * dbc_loss + transition_reward_loss
+
+        self.encoder_optimizer.zero_grad()
+        # decoder optimizer binds to parameters of 1) reward decoder; 2) transition model.
+        self.decoder_optimizer.zero_grad()
+        total_loss.backward()
+        self.encoder_optimizer.step()
+        self.decoder_optimizer.step()
+
+
+    def update_dribo(self, replay_buffer, L, step):
+        # rssm sample multi-view
+        obs, action, reward, \
+            not_done, mib_kwargs = replay_buffer.sample_multi_view(
+                self.batch_size, self.seq_len
+            )
 
         if step % self.log_interval == 0:
             L.log('train/batch_reward', reward.mean(), step)
@@ -533,6 +653,8 @@ class BSIBOSacAgent(object):
             obs1, obs2 = mib_kwargs["view1"], \
                 mib_kwargs["view2"]
             self.update_mib(obs1, obs2, action, mib_kwargs, L, step)
+
+
 
     def save_BSIBO(self, model_dir, step):
         params = dict(BSIBO=self.BSIBO, encoder=self.encoder, actor=self.actor)

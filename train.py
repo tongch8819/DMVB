@@ -76,6 +76,7 @@ def parse_args():
     parser.add_argument('--save_video', default=False, action='store_true')
     parser.add_argument('--save_model', default=False, action='store_true')
     parser.add_argument('--detach_encoder', default=False, action='store_true')
+    parser.add_argument('--transition_model_type', default='probabilistic', type=str, choices=['', 'deterministic', 'probabilistic', 'ensemble'])
 
     # noisy bg
     parser.add_argument('--noisy_bg', default=False, action='store_true')
@@ -138,6 +139,7 @@ def make_agent(obs_shape, action_shape, args, device):
             obs_shape=obs_shape,
             action_shape=action_shape,
             device=device,
+            transition_model_type=args.transition_model_type,
             hidden_dim=args.hidden_dim,
             discount=args.discount,
             init_temperature=args.init_temperature,

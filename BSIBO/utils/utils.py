@@ -184,6 +184,14 @@ class ReplayBuffer(Dataset):
         obses = self.obses[idxs]
         next_obses = self.next_obses[idxs]
 
+        # add random crop to pass observation into encoder to update using dbc loss
+        obses = random_crop(obses, self.image_size)
+        next_obses = random_crop(next_obses, self.image_size)
+        obses = torch.as_tensor(obses, device=self.device).float()
+        next_obses = torch.as_tensor(
+            next_obses, device=self.device
+        ).float()
+
         obses = torch.as_tensor(obses, device=self.device).float()
         actions = torch.as_tensor(self.actions[idxs], device=self.device)
         rewards = torch.as_tensor(self.rewards[idxs], device=self.device)
