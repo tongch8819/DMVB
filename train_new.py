@@ -13,6 +13,7 @@ from BSIBO.utils.video import VideoRecorder
 # from BSIBO.agent import BSIBOSacAgent
 from BSIBO.agent_new import BSIBOSacAgent
 from BSIBO.utils import pytorch_util as ptu
+from BSIBO.bisim import BisimMetric
 
 
 def parse_args():
@@ -77,7 +78,7 @@ def parse_args():
     parser.add_argument('--save_video', default=False, action='store_true')
     parser.add_argument('--save_model', default=False, action='store_true')
     parser.add_argument('--detach_encoder', default=False, action='store_true')
-    parser.add_argument('--transition_model_type', default='probabilistic', type=str, choices=['', 'deterministic', 'probabilistic', 'ensemble'])
+    parser.add_argument('--bisim_model_path', default='exp/bisim/model/bisim.pt', type=str)
 
     # noisy bg
     parser.add_argument('--noisy_bg', default=False, action='store_true')
@@ -140,7 +141,7 @@ def make_agent(obs_shape, action_shape, args, device):
             obs_shape=obs_shape,
             action_shape=action_shape,
             device=device,
-            transition_model_type=args.transition_model_type,
+            bisim_model_path=args.bisim_model_path,
             hidden_dim=args.hidden_dim,
             discount=args.discount,
             init_temperature=args.init_temperature,

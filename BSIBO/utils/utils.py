@@ -175,6 +175,23 @@ class ReplayBuffer(Dataset):
         self.idx = (self.idx + 1) % self.capacity
         self.full = self.full or self.idx == 0
 
+    def sample_proprio_without_crop(self):
+        idxs = np.random.randint(
+            0, self.capacity if self.full else self.idx, size=self.batch_size
+        )
+        obses = self.obses[idxs]
+        obses_crop = random_crop(obses, self.image_size)  # random crop takes numpy as input
+
+        obses = torch.as_tensor(obses, device=self.device).float()
+        obses_crop = torch.as_tensor(obses_crop, device=self.device).float()
+        actions = torch.as_tensor(self.actions[idxs], device=self.device)
+        rewards = torch.as_tensor(self.rewards[idxs], device=self.device)
+        next_obses = torch.as_tensor(
+            self.next_obses[idxs], device=self.device
+        ).float()
+        not_dones = torch.as_tensor(self.not_dones[idxs], device=self.device)
+        return obses, obses_crop, actions, rewards, next_obses, not_dones
+
     def sample_proprio(self):
 
         idxs = np.random.randint(

@@ -29,7 +29,7 @@ class BisimMetric(nn.Module):
             nn.ReLU(),
             nn.LayerNorm(512),
             nn.Linear(512, 1),
-            nn.Tanh(),
+            nn.Sigmoid()
         )
 
     def forward(self, s1, s2):
@@ -180,7 +180,7 @@ def warmup_replaybuffer():
         print(idx, len(lst))
     replay_buffer.save('exp/bisim')
 
-def main():
+def train_bisim_net():
     args = parse_args()
 
     env = dmc2gym.make(
@@ -233,8 +233,47 @@ def main():
     torch.save(params, f'exp/bisim/model/bisim.pt')
 
 
+def load_model():
+    model = torch.load(f'exp/bisim/model/bisim.pt')['bisim']
+
+    args = parse_args()
+
+    env = dmc2gym.make(
+        domain_name="cartpole",
+        task_name="swingup",
+        seed=args.seed,
+        visualize_reward=False,
+        from_pixels="rssm",
+        height=100,
+        width=100,
+        frame_skip=8
+    )
+    env.seed = args.seed
+
+    obs_shape = env.observation_space.shape
+    act_shape = env.action_space.shape
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    replay_buffer = ReplayBuffer(1000, obs_shape, act_shape, 24, device)
+    replay_buffer.load('exp/bisim')
+
+    action = env.action_space.sample()
+    rst = replay_buffer.get_other_pairs(action=action)
+    if rst is None:
+        print("Action miss")
+        return
+    obses, actions, rewards, next_obses, not_dones = rst
+    batch_size = obses.size(0)
+    perm = np.random.permutation(batch_size)
+    obses2 = obses[perm]
+    bisim_dist = model(obses, obses2)
+    print(bisim_dist)
+
+
+
 
 
 if __name__ == "__main__":
     # warmup_replaybuffer()
-    main()
+    # train_bisim_net()
+    load_model()
