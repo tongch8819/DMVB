@@ -19,6 +19,6 @@ Technical Selection
 
 todo
 Debug architecture
-Carpole
+Cartpole
 obs_space    Box(0, 1, (3,100,100), uint8)
 action_space (1,)

@@ -278,12 +278,13 @@ class BSIBOSacAgent(object):
 
         # -------------------------------------------------
         # transition model related components
+        encoder_output_size = deterministic_size + stochastic_size
         self.transition_model = make_transition_model(
-            transition_model_type, encoder_feature_dim, action_shape
+            transition_model_type, encoder_output_size, action_shape
         ).to(device)
 
         self.reward_decoder = nn.Sequential(
-            nn.Linear(encoder_feature_dim, 512),
+            nn.Linear(encoder_output_size, 512),
             nn.LayerNorm(512),
             nn.ReLU(),
             nn.Linear(512, 1)).to(device)
@@ -505,9 +506,7 @@ class BSIBOSacAgent(object):
             """
             Update encoder using DBC loss (Bisimulation Based)
             """
-            h_rssm_state = self.encoder(obs)  # this encoder returns a RSSMState object
-            h = h_rssm_state.deter + h_rssm_state.stoch
-
+            h = self.encoder.forward_deter(obs)  # this encoder returns a RSSMState object, deter.shape + stoch.shape
     
             # Sample random states across episodes at random
             batch_size = obs.size(0)
@@ -548,12 +547,12 @@ class BSIBOSacAgent(object):
             return loss
 
         def compute_transition_reward_loss(obs, action, next_obs, reward):
-            h = self.encoder(obs)
+            h = self.encoder.forward_deter(obs)
             pred_next_latent_mu, pred_next_latent_sigma = self.transition_model(torch.cat([h, action], dim=1))
             if pred_next_latent_sigma is None:
                 pred_next_latent_sigma = torch.ones_like(pred_next_latent_mu)
     
-            next_h = self.encoder(next_obs)
+            next_h = self.encoder.forward_deter(next_obs)
             diff = (pred_next_latent_mu - next_h.detach()) / pred_next_latent_sigma
             loss = torch.mean(0.5 * diff.pow(2) + torch.log(pred_next_latent_sigma))
             L.log('train_ae/transition_loss', loss, step)

@@ -192,6 +192,11 @@ class RSSMEncoder(nn.Module):
         state = self.get_state_representation(obs, prev_action, prev_state)
         return state
 
+    def forward_deter(self, obs):
+        # used for update procedure of DBC loss
+        h_rssm_state = self.forward(obs)
+        return torch.cat([h_rssm_state.deter, h_rssm_state.stoch], dim=1)
+
     def log(self, L, step, log_freq):
         if step % log_freq != 0:
             return
@@ -200,6 +205,7 @@ class RSSMEncoder(nn.Module):
             L.log_histogram('train_encoder/%s_hist' % k, v, step)
             if len(v.shape) > 2:
                 L.log_image('train_encoder/%s_img' % k, v[0], step)
+
 
 _AVAILABLE_ENCODERS = {
     'pixel': PixelEncoder, 'identity': IdentityEncoder, 'rssm': RSSMEncoder,
