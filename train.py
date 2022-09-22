@@ -10,8 +10,7 @@ from BSIBO.utils import utils
 from BSIBO.utils.logger import Logger
 from BSIBO.utils.video import VideoRecorder
 
-# from BSIBO.agent import BSIBOSacAgent
-from BSIBO.agent_new import BSIBOSacAgent
+from BSIBO.agent import BSIBOSacAgent
 from BSIBO.utils import pytorch_util as ptu
 
 

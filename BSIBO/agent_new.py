@@ -472,7 +472,7 @@ class BSIBOSacAgent(object):
         self.encoder_optimizer.step()
         self.BSIBO_optimizer.step()
         if step % self.log_interval == 0:
-            L.log('train/BSIBO_loss', loss, step)
+            L.log('train/BSIBO_mib_loss', loss, step)
             L.log('train/beta', beta, step)
             L.log('train/skl', skl, step)
 
@@ -486,27 +486,50 @@ class BSIBOSacAgent(object):
         metric in image space: W2 distance
         pretrained BSM network
         """
+        # torch.autograd.set_detect_anomaly(True)
         obs, obs_crop, action, reward, next_obs, not_done = replay_buffer.sample_proprio_without_crop()
         batch_size = obs.size(0)
         perm = np.random.permutation(batch_size)
-        obs2, obs2_crop = obs[perm], obs_crop[perm]
+        obs2, obs2_crop, action2 = obs[perm], obs_crop[perm], action[perm]
         bsm = self.bisim_model(obs, obs2)
+        bsm = bsm.squeeze(dim=-1)
 
         s1 = self.encoder(obs_crop)  # encoder need croped observation while bisimulation model does not (implementation difference)
         s2 = self.encoder(obs2_crop)
+        # _, s1 = self.BSIBO.encode(obs_crop, action)   # obs does not have time dimension
+        # _, s2 = self.BSIBO.encode(obs2_crop, action2)
         mu1, mu2 = s1.mean, s2.mean 
         sigma1, sigma2 = s1.std, s2.std
-        deter_dist = F.smooth_l1_loss(s1.deter, s2.deter)
-        w2_dist = torch.sqrt(
-            (mu1 - mu2).pow(2) + (sigma1 - sigma2).pow(2)
+        deter_dist = F.smooth_l1_loss(s1.deter, s2.deter, reduction="none").mean(dim=-1)
+        # w2_dist = torch.sqrt( (mu1 - mu2).pow(2) + (sigma1 - sigma2).pow(2) ).mean(dim=-1)
+        s1_dist = get_dist(s1)
+        s2_dist = get_dist(s2)
+        kl_dist = torch.mean(
+            torch.distributions.kl.kl_divergence(s1_dist, s2_dist)
         )
-        loss = (deter_dist + w2_dist - bsm).pow(2).mean()
+        loss = (deter_dist + kl_dist - bsm).pow(2).mean()
         L.log('train_ae/encoder_loss', loss, step)
 
+        has_nan = False
         self.encoder_optimizer.zero_grad()
-        loss.backward()
-        self.encoder_optimizer.step()
-
+        self.BSIBO_optimizer.zero_grad()
+        if torch.isnan(loss).any():
+            print("Loss has nan. Skip the step.")
+            has_nan = True
+        if not has_nan:
+            loss.backward()
+        for param in self.encoder.parameters():
+            if param is None or param.grad is None:
+                continue
+            if torch.isnan(param.grad.view(-1)).any():
+                print("Loss: {} with gradient explosion. Skip the step.".format(loss))
+                has_nan = True
+        if not has_nan:
+            self.encoder_optimizer.step()
+            self.BSIBO_optimizer.step()
+        if step % self.log_interval == 0:
+            L.log('train/BSIBO_dbc_loss', loss, step)
+        # torch.autograd.set_detect_anomaly(False)
 
     def update_dribo(self, replay_buffer, L, step):
         # rssm sample multi-view
