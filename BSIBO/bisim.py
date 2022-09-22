@@ -138,11 +138,12 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--seed', default=1, type=int)
-    parser.add_argument('--num_train_steps', default=100, type=int)
+    parser.add_argument('--num_of_rollout_steps', default=100, type=int)
+    parser.add_argument('--num_of_training_steps', default=100, type=int)
     args = parser.parse_args()
     return args
 
-def warmup_replaybuffer():
+def warmup_replaybuffer(work_dir):
     args = parse_args()
 
     env = dmc2gym.make(
@@ -161,11 +162,11 @@ def warmup_replaybuffer():
     act_shape = env.action_space.shape
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    replay_buffer = ReplayBuffer(1000, obs_shape, act_shape, 24, device)
+    replay_buffer = ReplayBuffer(args.num_of_rollout_steps, obs_shape, act_shape, 24, device)
 
     obs = env.reset()
     episode, episode_reward, done = 0, 0, False
-    for step in range(args.num_train_steps):
+    for step in range(args.num_of_rollout_steps):
         if done:
             obs = env.reset()
             episode_step, episode_reward, done = 0, 0, False
@@ -174,13 +175,13 @@ def warmup_replaybuffer():
         next_obs, reward, done, _ = env.step(action)
         replay_buffer.append(obs, action, reward, next_obs, done)
         obs = next_obs
-        print(step, reward)
+        # print(step, reward)
 
-    for idx, lst in replay_buffer.action_to_bin.items():
-        print(idx, len(lst))
-    replay_buffer.save('exp/bisim')
+    # for idx, lst in replay_buffer.action_to_bin.items():
+        # print(idx, len(lst))
+    replay_buffer.save(work_dir)
 
-def train_bisim_net():
+def train_bisim_net(work_dir):
     args = parse_args()
 
     env = dmc2gym.make(
@@ -201,12 +202,12 @@ def train_bisim_net():
     model = BisimMetric(obs_shape)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     replay_buffer = ReplayBuffer(1000, obs_shape, act_shape, 24, device)
-    replay_buffer.load('exp/bisim')
+    replay_buffer.load(work_dir)
 
     gamma = 0.9 # bisimulation parameter
     optimizer = Adam(model.parameters(), lr=1e-3)
 
-    for i in range(10):
+    for i in range(args.num_of_training_steps):
         action = env.action_space.sample()
         rst = replay_buffer.get_other_pairs(action)
         if rst is None:
@@ -227,10 +228,10 @@ def train_bisim_net():
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        print(i, loss)
+        # print(i, loss)
 
     params = dict(bisim=model)
-    torch.save(params, f'exp/bisim/model/bisim.pt')
+    torch.save(params, f'{work_dir}/model/bisim.pt')
 
 
 def load_model():
@@ -267,13 +268,19 @@ def load_model():
     perm = np.random.permutation(batch_size)
     obses2 = obses[perm]
     bisim_dist = model(obses, obses2)
-    print(bisim_dist)
+    # print(bisim_dist)
 
 
+def main():
+    work_dir = 'exp/bisim'
+    if not os.path.isdir(work_dir):
+        os.system(f'mkdir {work_dir}')
+    if not os.path.isdir(work_dir + '/buffer'):
+        os.system('mkdir {}/buffer {}/act2idx {}/model'.format(work_dir, work_dir, work_dir))
+    warmup_replaybuffer(work_dir)
+    train_bisim_net(work_dir)
 
 
 
 if __name__ == "__main__":
-    # warmup_replaybuffer()
-    # train_bisim_net()
-    load_model()
+    main()
