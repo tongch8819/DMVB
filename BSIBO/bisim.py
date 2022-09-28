@@ -79,6 +79,7 @@ class ReplayBuffer:
         return obses, actions, rewards, next_obses, not_dones
 
     def _action_to_bin_idx(self, action):
+        # TODO: maybe too empirical
         return int((action + 1.) / .1)
 
     def append(self, obs, action, reward, next_obs, done):

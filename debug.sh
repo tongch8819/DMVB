@@ -6,7 +6,8 @@
 
 
 # CUDA_VISIBLE_DEVICES=0 python train.py \
-CUDA_VISIBLE_DEVICES=0 python train_new.py \
+# CUDA_VISIBLE_DEVICES=0 python train_new.py \
+CUDA_VISIBLE_DEVICES=0 python trainv2.py \
 --domain_name cartpole \
 --task_name swingup \
 --encoder_type rssm \
