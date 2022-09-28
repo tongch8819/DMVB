@@ -22,3 +22,9 @@ Debug architecture
 Cartpole
 obs_space    Box(0, 1, (3,100,100), uint8)
 action_space (1,)
+
+
+Dependency
+gym must be 0.25.1
+0.26 has step error
+0.21 has registory error
