@@ -141,6 +141,8 @@ class BSIBO(nn.Module):
     def compute_multi_view_skl(self, obs1, obs2, z1, z2, actions, ema=False):
         z1_ = self.multi_view_encode(obs1, z2, actions)
         z2_ = self.multi_view_encode(obs2, z1, actions, ema=ema)
+        # z3_ = self.multi_view_encode(obs2, z1, actions)
+        # z4_ = self.multi_view_encode(obs1, z2, actions)
         z1_dist = get_dist(z1_)
         z2_dist = get_dist(z2_)
 
