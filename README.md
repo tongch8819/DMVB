@@ -28,3 +28,10 @@ Dependency
 gym must be 0.25.1
 0.26 has step error
 0.21 has registory error
+
+
+
+Action space 
++ cartpole swing Box(-1.0, 1.0, (1,), float32) 
++ finger spin  Box(-1.0, 1.0, (2,), float32)
++ cheetah run Box(-1.0, 1.0, (6,), float32)

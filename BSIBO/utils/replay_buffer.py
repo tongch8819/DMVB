@@ -45,8 +45,10 @@ class SuperReplayBuffer(Dataset):
         return self.actions[idx]
 
     def _action_to_bin_idx(self, action):
+        # action is np.ndarray
         # TODO: maybe too empirical
-        return int((action + 1.) / .1)
+        res = (10 * (action + 1)).astype('int32')
+        return ''.join(map(str, res))
 
     def add(self, obs, action, reward, next_obs, done):
 

@@ -8,8 +8,8 @@
 # CUDA_VISIBLE_DEVICES=0 python train.py \
 # CUDA_VISIBLE_DEVICES=0 python train_new.py \
 CUDA_VISIBLE_DEVICES=0 python trainv2.py \
---domain_name cartpole \
---task_name swingup \
+--domain_name finger \
+--task_name spin \
 --encoder_type rssm \
 --work_dir ./exp \
 --action_repeat 8 \
