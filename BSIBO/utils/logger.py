@@ -1,3 +1,9 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
+# All rights reserved.
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 from torch.utils.tensorboard import SummaryWriter
 from collections import defaultdict
 import json
@@ -11,38 +17,14 @@ from termcolor import colored
 FORMAT_CONFIG = {
     'rl': {
         'train': [
-            ('episode', 'E', 'int'), ('step', 'S', 'int'),
+            ('episode', 'E', 'int'), ('step', 'S', 'int'), 
             ('duration', 'D', 'time'), ('episode_reward', 'R', 'float'),
-            ('batch_reward', 'BR', 'float'), ('actor_loss', 'A_LOSS', 'float'),
-            ('critic_loss', 'CR_LOSS', 'float'),
-            ('curl_loss', 'CU_LOSS', 'float'),
+            ('batch_reward', 'BR', 'float'), ('actor_loss', 'ALOSS', 'float'),
+            ('critic_loss', 'CLOSS', 'float'), ('ae_loss', 'RLOSS', 'float'),
+            ('max_rat', 'MR', 'float')
         ],
         'eval': [('step', 'S', 'int'), ('episode_reward', 'ER', 'float')]
-    },
-    'DRIBO': {
-        'train': [
-            ('episode', 'E', 'int'), ('step', 'S', 'int'),
-            ('duration', 'D', 'time'), ('episode_reward', 'R', 'float'),
-            ('batch_reward', 'BR', 'float'), ('actor_loss', 'A_LOSS', 'float'),
-            ('critic_loss', 'CR_LOSS', 'float'),
-            ('DRIBO_loss', 'MIB_LOSS', 'float'),
-            ('skl', 'skl', 'float'),
-            ('beta', 'beta', 'sci'),
-        ],
-        'eval': [('step', 'S', 'int'), ('episode_reward', 'ER', 'float')]
-    },
-    'BSIBO': {
-        'train': [
-            ('episode', 'E', 'int'), ('step', 'S', 'int'),
-            ('duration', 'D', 'time'), ('episode_reward', 'R', 'float'),
-            ('batch_reward', 'BR', 'float'), ('actor_loss', 'A_LOSS', 'float'),
-            ('critic_loss', 'CR_LOSS', 'float'),
-            ('DRIBO_loss', 'MIB_LOSS', 'float'),
-            ('skl', 'skl', 'float'),
-            ('beta', 'beta', 'sci'),
-        ],
-        'eval': [('step', 'S', 'int'), ('episode_reward', 'ER', 'float')]
-    },
+    }
 }
 
 
@@ -91,8 +73,6 @@ class MetersGroup(object):
             template += '%d'
         elif ty == 'float':
             template += '%.04f'
-        elif ty == 'sci':
-            template += '%.1E'
         elif ty == 'time':
             template += '%.01f s'
         else:
