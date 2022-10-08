@@ -315,6 +315,76 @@ class BisimAgent(object):
 
 class BisimMultiViewAgent(BisimAgent):
 
+    def __init__(
+        self,
+        obs_shape,
+        action_shape,
+        device,
+        transition_model_type,
+        hidden_dim=256,
+        discount=0.99,
+        init_temperature=0.01,
+        alpha_lr=1e-3,
+        alpha_beta=0.9,
+        actor_lr=1e-3,
+        actor_beta=0.9,
+        actor_log_std_min=-10,
+        actor_log_std_max=2,
+        actor_update_freq=2,
+        encoder_stride=2,
+        critic_lr=1e-3,
+        critic_beta=0.9,
+        critic_tau=0.005,
+        critic_target_update_freq=2,
+        encoder_type='pixel',
+        encoder_feature_dim=50,
+        encoder_lr=1e-3,
+        encoder_tau=0.005,
+        decoder_type='pixel',
+        decoder_lr=1e-3,
+        decoder_update_freq=1,
+        decoder_latent_lambda=0.0,
+        decoder_weight_lambda=0.0,
+        num_layers=4,
+        num_filters=32,
+        bisim_coef=0.5,
+        crop_size=68,
+    ):
+        super().__init__(
+            obs_shape,
+            action_shape,
+            device,
+            transition_model_type,
+            hidden_dim,
+            discount,
+            init_temperature,
+            alpha_lr,
+            alpha_beta,
+            actor_lr,
+            actor_beta,
+            actor_log_std_min,
+            actor_log_std_max,
+            actor_update_freq,
+            encoder_stride,
+            critic_lr,
+            critic_beta,
+            critic_tau,
+            critic_target_update_freq,
+            encoder_type,
+            encoder_feature_dim,
+            encoder_lr,
+            encoder_tau,
+            decoder_type,
+            decoder_lr,
+            decoder_update_freq,
+            decoder_latent_lambda,
+            decoder_weight_lambda,
+            num_layers,
+            num_filters,
+            bisim_coef,
+        )
+        self.crop_size = crop_size
+
     def update_encoder(self, obs, action, reward, L, step):
         """
         Bisimulation Multiview 
@@ -358,10 +428,10 @@ class BisimMultiViewAgent(BisimAgent):
         bisim_loss = (z_dist - bisimilarity).pow(2).mean()
 
         # 2. multi-view loss
-        obs1 = utils.random_crop_padding(obs)
-        obs2 = utils.grayscale(obs)  # TODO: could change into grayscale
+        obs1 = utils.random_crop_padding(obs, out=self.crop_size)
+        obs2 = utils.random_crop_padding(obs, out=self.crop_size)  # TODO: could change into grayscale, but it returns [512, 3, 3, 84, 84] instead of [512, 9, 84, 84]
         s1, s2 = self.critic.encoder(obs1), self.critic.encoder(obs2)
-        mv_loss = F.smooth_l1_loss(s1, s2, reduction='none')
+        mv_loss = F.smooth_l1_loss(s1, s2, reduction='none').mean()
 
         loss = bisim_loss + mv_loss
 

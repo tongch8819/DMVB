@@ -85,6 +85,8 @@ def parse_args():
     parser.add_argument('--transition_model_type', default='', type=str, choices=['', 'deterministic', 'probabilistic', 'ensemble'])
     parser.add_argument('--render', default=False, action='store_true')
     parser.add_argument('--port', default=2000, type=int)
+    # bmv
+    parser.add_argument('--crop_size', default=68, type=int)  # cheeath run 84 * 0.8
     args = parser.parse_args()
     return args
 
@@ -223,7 +225,8 @@ def make_agent(obs_shape, action_shape, args, device):
             transition_model_type=args.transition_model_type,
             num_layers=args.num_layers,
             num_filters=args.num_filters,
-            bisim_coef=args.bisim_coef
+            bisim_coef=args.bisim_coef,
+            crop_size=args.crop_size,
         )
     else:
         raise NotImplementedError
