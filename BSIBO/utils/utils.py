@@ -662,3 +662,16 @@ class FrameStack(gym.Wrapper):
     def _get_obs(self):
         assert len(self._frames) == self._k
         return np.concatenate(list(self._frames), axis=0)
+
+
+def augment_observation(obs, num_of_views):
+    """
+    Create multi-views and aggregate them
+    Input:
+    obs - C, H, W image
+    """
+    assert type(num_of_views) is int and num_of_views >= 2, "Number of views must be int"
+    views = [ random_crop(obs) for _ in range(num_of_views) ]
+    return np.concatenate(views, axis=0)
+
+    

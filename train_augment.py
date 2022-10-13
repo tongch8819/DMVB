@@ -85,6 +85,8 @@ def parse_args():
     parser.add_argument('--transition_model_type', default='', type=str, choices=['', 'deterministic', 'probabilistic', 'ensemble'])
     parser.add_argument('--render', default=False, action='store_true')
     parser.add_argument('--port', default=2000, type=int)
+    # views
+    parser.add_argument('--num_of_views', default=5, type=int)
     args = parser.parse_args()
     return args
 
@@ -291,8 +293,11 @@ def main():
     assert env.action_space.low.min() >= -1
     assert env.action_space.high.max() <= 1
 
+    obs_shape = env.observation_space.shape
+    aug_obs_shape = obs_shape * np.array([args.num_of_views] + [1.] * (len(obs_shape) - 1))
+
     replay_buffer = utils.ReplayBuffer(
-        obs_shape=env.observation_space.shape,
+        obs_shape=aug_obs_shape,
         action_shape=env.action_space.shape,
         capacity=args.replay_buffer_capacity,
         batch_size=args.batch_size,
@@ -300,15 +305,13 @@ def main():
     )
 
     agent = make_agent(
-        obs_shape=env.observation_space.shape,
+        obs_shape=aug_obs_shape,
         action_shape=env.action_space.shape,
         args=args,
         device=device
     )
 
     L = Logger(args.work_dir, use_tb=args.save_tb)
-    print(env.observation_space.shape)
-    return 
 
     episode, episode_reward, done = 0, 0, True
     start_time = time.time()
@@ -334,6 +337,7 @@ def main():
             L.log('train/episode_reward', episode_reward, step)
 
             obs = env.reset()
+            aug_obs = utils.augment_observation(obs, args.num_of_views)
             done = False
             episode_reward = 0
             episode_step = 0
@@ -347,7 +351,7 @@ def main():
             action = env.action_space.sample()
         else:
             with utils.eval_mode(agent):
-                action = agent.sample_action(obs)
+                action = agent.sample_action(aug_obs)
 
         # run training update
         if step >= args.init_steps:
@@ -368,6 +372,7 @@ def main():
         np.copyto(replay_buffer.k_obses[replay_buffer.idx - args.k], next_obs)
 
         obs = next_obs
+        aug_obs = utils.augment_observation(obs, args.num_of_views)
         episode_step += 1
 
 

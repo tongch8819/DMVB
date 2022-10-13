@@ -8,5 +8,6 @@ python train.py \
     --save_tb \
     --work_dir ./log \
     --seed 1 \
+    --agent bmv \
     1>exp/train.log 2>&1 &
 echo $! >exp/pid.txt

@@ -369,3 +369,4 @@ class BisimMultiViewAgent(BisimAgent):
         L.log('train_ae/bisim_loss', bisim_loss, step)
         L.log('train_ae/mv_loss', mv_loss, step)
         return loss
+
