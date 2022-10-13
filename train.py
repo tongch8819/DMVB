@@ -310,8 +310,6 @@ def main():
     )
 
     L = Logger(args.work_dir, use_tb=args.save_tb)
-    print(env.observation_space.shape)
-    return 
 
     episode, episode_reward, done = 0, 0, True
     start_time = time.time()

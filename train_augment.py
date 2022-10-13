@@ -294,7 +294,7 @@ def main():
     assert env.action_space.high.max() <= 1
 
     obs_shape = env.observation_space.shape
-    aug_obs_shape = obs_shape * np.array([args.num_of_views] + [1.] * (len(obs_shape) - 1))
+    aug_obs_shape = obs_shape * np.array([args.num_of_views] + [1] * (len(obs_shape) - 1), dtype=np.int8)
 
     replay_buffer = utils.ReplayBuffer(
         obs_shape=aug_obs_shape,
@@ -361,6 +361,7 @@ def main():
 
         curr_reward = reward
         next_obs, reward, done, _ = env.step(action)
+        next_aug_obs = utils.augment_observation(next_obs, args.num_of_views)
 
         # allow infinit bootstrap
         done_bool = 0 if episode_step + 1 == env._max_episode_steps else float(
@@ -368,11 +369,12 @@ def main():
         )
         episode_reward += reward
 
-        replay_buffer.add(obs, action, curr_reward, reward, next_obs, done_bool)
-        np.copyto(replay_buffer.k_obses[replay_buffer.idx - args.k], next_obs)
+        # add augmented obs
+        replay_buffer.add(aug_obs, action, curr_reward, reward, next_obs, done_bool)
+        np.copyto(replay_buffer.k_obses[replay_buffer.idx - args.k], next_aug_obs)
 
         obs = next_obs
-        aug_obs = utils.augment_observation(obs, args.num_of_views)
+        aug_obs = next_aug_obs
         episode_step += 1
 
 
