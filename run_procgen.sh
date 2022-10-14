@@ -1,0 +1,1 @@
+python -m procgen.interactive --env-name starpilot

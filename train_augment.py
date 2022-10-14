@@ -87,11 +87,12 @@ def parse_args():
     parser.add_argument('--port', default=2000, type=int)
     # views
     parser.add_argument('--num_of_views', default=5, type=int)
+    parser.add_argument('--cropped_image_size', default=64, type=int)
     args = parser.parse_args()
     return args
 
 
-def evaluate(env, agent, video, num_episodes, L, step, device=None, embed_viz_dir=None, do_carla_metrics=None):
+def evaluate(env, agent, video, num_episodes, L, step, args, device=None, embed_viz_dir=None, do_carla_metrics=None):
     # carla metrics:
     reason_each_episode_ended = []
     distance_driven_each_episode = []
@@ -110,20 +111,22 @@ def evaluate(env, agent, video, num_episodes, L, step, device=None, embed_viz_di
         dist_driven_this_episode = 0.
 
         obs = env.reset()
+        aug_obs = utils.augment_observation(obs, args.num_of_views, args.cropped_image_size)
         video.init(enabled=(i == 0))
         done = False
         episode_reward = 0
         while not done:
             with utils.eval_mode(agent):
-                action = agent.select_action(obs)
+                action = agent.select_action(aug_obs)
 
             if embed_viz_dir:
                 obses.append(obs)
                 with torch.no_grad():
-                    values.append(min(agent.critic(torch.Tensor(obs).to(device).unsqueeze(0), torch.Tensor(action).to(device).unsqueeze(0))).item())
-                    embeddings.append(agent.critic.encoder(torch.Tensor(obs).unsqueeze(0).to(device)).cpu().detach().numpy())
+                    values.append(min(agent.critic(torch.Tensor(aug_obs).to(device).unsqueeze(0), torch.Tensor(action).to(device).unsqueeze(0))).item())
+                    embeddings.append(agent.critic.encoder(torch.Tensor(aug_obs).unsqueeze(0).to(device)).cpu().detach().numpy())
 
             obs, reward, done, info = env.step(action)
+            aug_obs = utils.augment_observation(obs, args.num_of_views, args.cropped_image_size)
 
             # metrics:
             if do_carla_metrics:
@@ -294,7 +297,7 @@ def main():
     assert env.action_space.high.max() <= 1
 
     obs_shape = env.observation_space.shape
-    aug_obs_shape = obs_shape * np.array([args.num_of_views] + [1] * (len(obs_shape) - 1), dtype=np.int8)
+    aug_obs_shape = (obs_shape[0] * args.num_of_views, args.cropped_image_size, args.cropped_image_size)
 
     replay_buffer = utils.ReplayBuffer(
         obs_shape=aug_obs_shape,
@@ -328,7 +331,7 @@ def main():
             # evaluate agent periodically
             if episode % args.eval_freq == 0:
                 L.log('eval/episode', episode, step)
-                evaluate(eval_env, agent, video, args.num_eval_episodes, L, step)
+                evaluate(eval_env, agent, video, args.num_eval_episodes, L, step, args)
                 if args.save_model:
                     agent.save(model_dir, step)
                 if args.save_buffer:
@@ -337,7 +340,7 @@ def main():
             L.log('train/episode_reward', episode_reward, step)
 
             obs = env.reset()
-            aug_obs = utils.augment_observation(obs, args.num_of_views)
+            aug_obs = utils.augment_observation(obs, args.num_of_views, args.cropped_image_size)
             done = False
             episode_reward = 0
             episode_step = 0
@@ -361,7 +364,7 @@ def main():
 
         curr_reward = reward
         next_obs, reward, done, _ = env.step(action)
-        next_aug_obs = utils.augment_observation(next_obs, args.num_of_views)
+        next_aug_obs = utils.augment_observation(next_obs, args.num_of_views, args.cropped_image_size)
 
         # allow infinit bootstrap
         done_bool = 0 if episode_step + 1 == env._max_episode_steps else float(
@@ -370,7 +373,7 @@ def main():
         episode_reward += reward
 
         # add augmented obs
-        replay_buffer.add(aug_obs, action, curr_reward, reward, next_obs, done_bool)
+        replay_buffer.add(aug_obs, action, curr_reward, reward, next_aug_obs, done_bool)
         np.copyto(replay_buffer.k_obses[replay_buffer.idx - args.k], next_aug_obs)
 
         obs = next_obs

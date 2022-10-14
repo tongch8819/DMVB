@@ -76,6 +76,17 @@ def preprocess_obs(obs, bits=5):
     return obs
 
 
+def random_crop_single(img, out):
+    """
+    Crop single image
+    """
+    c, h, w = img.shape
+    crop_max = h - out + 1
+    w1 = np.random.randint(0, crop_max)
+    h1 = np.random.randint(0, crop_max)
+    cropped = img[:, h1:h1+out, w1:w1+out]
+    return cropped
+
 def random_crop_numpy(imgs, out=84):
     """
         args:
@@ -465,14 +476,14 @@ class FrameStack(gym.Wrapper):
         return np.concatenate(list(self._frames), axis=0)
 
 
-def augment_observation(obs, num_of_views):
+def augment_observation(obs, num_of_views, cropped_image_size):
     """
     Create multi-views and aggregate them
     Input:
     obs - C, H, W image
     """
     assert type(num_of_views) is int and num_of_views >= 2, "Number of views must be int"
-    views = [ random_crop(obs) for _ in range(num_of_views) ]
+    views = [ random_crop_single(obs, out=cropped_image_size) for _ in range(num_of_views) ]
     return np.concatenate(views, axis=0)
 
     
