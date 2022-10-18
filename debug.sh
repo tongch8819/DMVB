@@ -1,5 +1,5 @@
-python train_augment.py \
-    --agent bisim \
+python train.py \
+    --agent value \
     --replay_buffer_capacity 1000 \
     --num_train_steps 100 \
     --batch_size 16 \

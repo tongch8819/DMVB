@@ -440,3 +440,133 @@ class BisimMultiViewAgent(BisimAgent):
         L.log('train_ae/mv_loss', mv_loss, step)
         return loss
 
+class BisimMultiViewAgentValueBased(BisimAgent):
+
+    def __init__(
+        self,
+        obs_shape,
+        action_shape,
+        device,
+        transition_model_type,
+        hidden_dim=256,
+        discount=0.99,
+        init_temperature=0.01,
+        alpha_lr=1e-3,
+        alpha_beta=0.9,
+        actor_lr=1e-3,
+        actor_beta=0.9,
+        actor_log_std_min=-10,
+        actor_log_std_max=2,
+        actor_update_freq=2,
+        encoder_stride=2,
+        critic_lr=1e-3,
+        critic_beta=0.9,
+        critic_tau=0.005,
+        critic_target_update_freq=2,
+        encoder_type='pixel',
+        encoder_feature_dim=50,
+        encoder_lr=1e-3,
+        encoder_tau=0.005,
+        decoder_type='pixel',
+        decoder_lr=1e-3,
+        decoder_update_freq=1,
+        decoder_latent_lambda=0.0,
+        decoder_weight_lambda=0.0,
+        num_layers=4,
+        num_filters=32,
+        bisim_coef=0.5,
+        crop_size=68,
+    ):
+        super().__init__(
+            obs_shape,
+            action_shape,
+            device,
+            transition_model_type,
+            hidden_dim,
+            discount,
+            init_temperature,
+            alpha_lr,
+            alpha_beta,
+            actor_lr,
+            actor_beta,
+            actor_log_std_min,
+            actor_log_std_max,
+            actor_update_freq,
+            encoder_stride,
+            critic_lr,
+            critic_beta,
+            critic_tau,
+            critic_target_update_freq,
+            encoder_type,
+            encoder_feature_dim,
+            encoder_lr,
+            encoder_tau,
+            decoder_type,
+            decoder_lr,
+            decoder_update_freq,
+            decoder_latent_lambda,
+            decoder_weight_lambda,
+            num_layers,
+            num_filters,
+            bisim_coef,
+        )
+        self.crop_size = crop_size
+
+    def update_encoder(self, obs, action, reward, L, step):
+        """
+        Bisimulation Multiview 
+        """
+        # 1. bisimulation loss
+        h = self.critic.encoder(obs)            
+        # Sample random states across episodes at random
+        batch_size = obs.size(0)
+        perm = np.random.permutation(batch_size)
+        h2 = h[perm]
+
+        with torch.no_grad():
+            # action, _, _, _ = self.actor(obs, compute_pi=False, compute_log_pi=False)
+            pred_next_latent_mu1, pred_next_latent_sigma1 = self.transition_model(torch.cat([h, action], dim=1))
+            # reward = self.reward_decoder(pred_next_latent_mu1)
+            reward2 = reward[perm]
+        if pred_next_latent_sigma1 is None:
+            pred_next_latent_sigma1 = torch.zeros_like(pred_next_latent_mu1)
+        if pred_next_latent_mu1.ndim == 2:  # shape (B, Z), no ensemble
+            pred_next_latent_mu2 = pred_next_latent_mu1[perm]
+            pred_next_latent_sigma2 = pred_next_latent_sigma1[perm]
+        elif pred_next_latent_mu1.ndim == 3:  # shape (B, E, Z), using an ensemble
+            pred_next_latent_mu2 = pred_next_latent_mu1[:, perm]
+            pred_next_latent_sigma2 = pred_next_latent_sigma1[:, perm]
+        else:
+            raise NotImplementedError
+
+        z_dist = F.smooth_l1_loss(h, h2, reduction='none')
+        r_dist = F.smooth_l1_loss(reward, reward2, reduction='none')
+        if self.transition_model_type == '':
+            transition_dist = F.smooth_l1_loss(pred_next_latent_mu1, pred_next_latent_mu2, reduction='none')
+        else:
+            transition_dist = torch.sqrt(
+                (pred_next_latent_mu1 - pred_next_latent_mu2).pow(2) +
+                (pred_next_latent_sigma1 - pred_next_latent_sigma2).pow(2)
+            )
+            # transition_dist  = F.smooth_l1_loss(pred_next_latent_mu1, pred_next_latent_mu2, reduction='none') \
+            #     +  F.smooth_l1_loss(pred_next_latent_sigma1, pred_next_latent_sigma2, reduction='none')
+
+        bisimilarity = r_dist + self.discount * transition_dist
+        bisim_loss = (z_dist - bisimilarity).pow(2).mean()
+
+        # 2. multi-view value-based loss
+        obs1 = utils.random_crop_padding(obs, out=self.crop_size)
+        obs2 = utils.random_crop_padding(obs, out=self.crop_size)  # TODO: could change into grayscale, but it returns [512, 3, 3, 84, 84] instead of [512, 9, 84, 84]
+        s1, s2 = self.critic(obs1), self.critic(obs2)
+        _, pi1, log_pi, log_std = self.actor(obs1, detach_encoder=False)
+        _, pi2, log_pi, log_std = self.actor(obs2, detach_encoder=False)
+        Q1 = torch.min(self.critic(obs1, pi1, detach_encoder=False))
+        Q2 = torch.min(self.critic(obs2, pi2, detach_encoder=False))
+        mv_loss = F.smooth_l1_loss(Q1, Q2, reduction='none').mean()
+
+        loss = bisim_loss + mv_loss
+
+        L.log('train_ae/encoder_loss', loss, step)
+        L.log('train_ae/bisim_loss', bisim_loss, step)
+        L.log('train_ae/mv_loss', mv_loss, step)
+        return loss
