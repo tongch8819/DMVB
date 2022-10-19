@@ -559,8 +559,10 @@ class BisimMultiViewAgentValueBased(BisimAgent):
         obs2 = utils.random_crop_padding(obs, out=self.crop_size)  # TODO: could change into grayscale, but it returns [512, 3, 3, 84, 84] instead of [512, 9, 84, 84]
         _, pi1, log_pi, log_std = self.actor(obs1, detach_encoder=False)
         _, pi2, log_pi, log_std = self.actor(obs2, detach_encoder=False)
-        Q1 = torch.min(self.critic(obs1, pi1, detach_encoder=False))
-        Q2 = torch.min(self.critic(obs2, pi2, detach_encoder=False))
+        Q11, Q12 = self.critic(obs1, pi1, detach_encoder=False)  # output of critic is two Q values
+        Q21, Q22 = self.critic(obs2, pi2, detach_encoder=False) 
+        Q1 = torch.min(Q11, Q12)
+        Q2 = torch.min(Q21, Q22)
         mv_loss = F.smooth_l1_loss(Q1, Q2, reduction='none').mean()
 
         loss = bisim_loss + mv_loss
