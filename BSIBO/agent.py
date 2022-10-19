@@ -557,7 +557,6 @@ class BisimMultiViewAgentValueBased(BisimAgent):
         # 2. multi-view value-based loss
         obs1 = utils.random_crop_padding(obs, out=self.crop_size)
         obs2 = utils.random_crop_padding(obs, out=self.crop_size)  # TODO: could change into grayscale, but it returns [512, 3, 3, 84, 84] instead of [512, 9, 84, 84]
-        s1, s2 = self.critic(obs1), self.critic(obs2)
         _, pi1, log_pi, log_std = self.actor(obs1, detach_encoder=False)
         _, pi2, log_pi, log_std = self.actor(obs2, detach_encoder=False)
         Q1 = torch.min(self.critic(obs1, pi1, detach_encoder=False))
