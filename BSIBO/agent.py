@@ -336,7 +336,7 @@ class BisimMultiViewAgent(BisimAgent):
         critic_beta=0.9,
         critic_tau=0.005,
         critic_target_update_freq=2,
-        encoder_type='pixel',
+        encoder_type='pixel_augment',
         encoder_feature_dim=50,
         encoder_lr=1e-3,
         encoder_tau=0.005,

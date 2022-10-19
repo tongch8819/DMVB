@@ -59,7 +59,7 @@ def parse_args():
     parser.add_argument('--actor_log_std_max', default=2, type=float)
     parser.add_argument('--actor_update_freq', default=2, type=int)
     # encoder/decoder
-    parser.add_argument('--encoder_type', default='pixel', type=str, choices=['pixel', 'pixelCarla096', 'pixelCarla098', 'identity'])
+    parser.add_argument('--encoder_type', default='pixel_augment', type=str, choices=['pixel', 'pixelCarla096', 'pixelCarla098', 'identity'])
     parser.add_argument('--encoder_feature_dim', default=50, type=int)
     parser.add_argument('--encoder_lr', default=1e-3, type=float)
     parser.add_argument('--encoder_tau', default=0.005, type=float)

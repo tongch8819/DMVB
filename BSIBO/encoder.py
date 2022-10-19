@@ -30,10 +30,8 @@ class PixelEncoder(nn.Module):
         for i in range(num_layers - 1):
             self.convs.append(nn.Conv2d(num_filters, num_filters, 3, stride=1))
 
-        # out_dim = {2: 39, 4: 35, 6: 31}[num_layers]
-        out_dim = {4: 20000}[num_layers]  # manual fix trick TODO could change it into formula
-        self.fc = nn.Linear(out_dim, self.feature_dim)
-        # self.fc = nn.Linear(num_filters * out_dim * out_dim, self.feature_dim)
+        out_dim = {2: 39, 4: 35, 6: 31}[num_layers]
+        self.fc = nn.Linear(num_filters * out_dim * out_dim, self.feature_dim)
         self.ln = nn.LayerNorm(self.feature_dim)
 
         self.outputs = dict()
@@ -90,6 +88,13 @@ class PixelEncoder(nn.Module):
             L.log_param('train_encoder/conv%s' % (i + 1), self.convs[i], step)
         L.log_param('train_encoder/fc', self.fc, step)
         L.log_param('train_encoder/ln', self.ln, step)
+
+class PixelEncoderBMVAugment(PixelEncoder):
+    def __init__(self, obs_shape, feature_dim, num_layers=2, num_filters=32, stride=None):
+        super().__init__(obs_shape, feature_dim, num_layers=2, num_filters=32, stride=None)
+
+        out_dim = {4: 20000}[num_layers]  # manual fix trick TODO could change it into formula
+        self.fc = nn.Linear(out_dim, self.feature_dim)
 
 
 class PixelEncoderCarla096(PixelEncoder):
@@ -157,6 +162,7 @@ class IdentityEncoder(nn.Module):
 
 
 _AVAILABLE_ENCODERS = {'pixel': PixelEncoder,
+                       'pixel_augment': PixelEncoderBMVAugment,
                        'pixelCarla096': PixelEncoderCarla096,
                        'pixelCarla098': PixelEncoderCarla098,
                        'identity': IdentityEncoder}
