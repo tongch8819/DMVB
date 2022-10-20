@@ -18,7 +18,7 @@ from BSIBO.utils import utils
 from BSIBO.utils.logger import Logger
 from BSIBO.utils.video import VideoRecorder
 
-from BSIBO.agent import BisimAgent, BisimMultiViewAgent, BisimMultiViewAgentValueBased 
+from BSIBO.agent import BisimAgent, BisimMultiViewAgent, BisimMultiViewAgentValueBased, BisimMultiViewAgentVariance 
 
 
 def parse_args():
@@ -36,7 +36,7 @@ def parse_args():
     # replay buffer
     parser.add_argument('--replay_buffer_capacity', default=1000000, type=int)
     # train
-    parser.add_argument('--agent', default='bmv', type=str, choices=['bmv', 'value', 'bisim'])
+    parser.add_argument('--agent', default='variance', type=str, choices=['bmv', 'value', 'bisim', 'variance'])
     parser.add_argument('--init_steps', default=1000, type=int)
     parser.add_argument('--num_train_steps', default=1000000, type=int)
     parser.add_argument('--batch_size', default=512, type=int)
@@ -87,6 +87,7 @@ def parse_args():
     parser.add_argument('--port', default=2000, type=int)
     # bmv
     parser.add_argument('--crop_size', default=68, type=int)  # cheeath run 84 * 0.8
+    parser.add_argument('--num_views', default=5, type=int)  # cheeath run 84 * 0.8
     args = parser.parse_args()
     return args
 
@@ -261,6 +262,41 @@ def make_agent(obs_shape, action_shape, args, device):
             num_filters=args.num_filters,
             bisim_coef=args.bisim_coef,
             crop_size=args.crop_size,
+        )
+    elif args.agent == 'variance':
+        agent = BisimMultiViewAgentVariance(
+            obs_shape=obs_shape,
+            action_shape=action_shape,
+            device=device,
+            hidden_dim=args.hidden_dim,
+            discount=args.discount,
+            init_temperature=args.init_temperature,
+            alpha_lr=args.alpha_lr,
+            alpha_beta=args.alpha_beta,
+            actor_lr=args.actor_lr,
+            actor_beta=args.actor_beta,
+            actor_log_std_min=args.actor_log_std_min,
+            actor_log_std_max=args.actor_log_std_max,
+            actor_update_freq=args.actor_update_freq,
+            critic_lr=args.critic_lr,
+            critic_beta=args.critic_beta,
+            critic_tau=args.critic_tau,
+            critic_target_update_freq=args.critic_target_update_freq,
+            encoder_type=args.encoder_type,
+            encoder_feature_dim=args.encoder_feature_dim,
+            encoder_lr=args.encoder_lr,
+            encoder_tau=args.encoder_tau,
+            encoder_stride=args.encoder_stride,
+            decoder_type=args.decoder_type,
+            decoder_lr=args.decoder_lr,
+            decoder_update_freq=args.decoder_update_freq,
+            decoder_weight_lambda=args.decoder_weight_lambda,
+            transition_model_type=args.transition_model_type,
+            num_layers=args.num_layers,
+            num_filters=args.num_filters,
+            bisim_coef=args.bisim_coef,
+            crop_size=args.crop_size,
+            num_views=args.num_views,
         )
     else:
         raise NotImplementedError
